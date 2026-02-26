@@ -1,0 +1,84 @@
+{
+  "experiment_name": "ee6222_dr_quick",
+  "data_root": "./data",
+  "datasets": ["fashion_mnist", "olivetti"],
+  "seeds": [0],
+  "cv_folds": 2,
+  "n_jobs": -1,
+  "methods": ["pca", "lda", "pca_lda", "kpca", "nmf", "ica", "ae", "vae"],
+  "classifiers": ["knn", "mahalanobis", "logistic"],
+  "tune_classifier": "logistic",
+  "d_grids": {
+    "fashion_mnist": [2, 8, 16],
+    "olivetti": [2, 10, 39]
+  },
+  "method_d_overrides": {
+    "lda": {
+      "fashion_mnist": [1, 5, 9],
+      "olivetti": [1, 10, 20, 39]
+    },
+    "pca_lda": {
+      "fashion_mnist": [1, 5, 9],
+      "olivetti": [1, 10, 20, 39]
+    }
+  },
+  "quick_subsample": {
+    "fashion_mnist_train": 6000,
+    "fashion_mnist_test": 1000,
+    "olivetti_train_per_class": 4,
+    "olivetti_test_per_class": 2
+  },
+  "training": {
+    "batch_size": 256,
+    "hidden_dim": 128,
+    "ae_epochs": 2,
+    "vae_epochs": 2,
+    "lr": 0.001,
+    "weight_decay": 0.00001,
+    "beta": 1.0,
+    "deep_max_train_samples": 3000
+  },
+  "method_grids": {
+    "pca": [
+      {"whiten": false},
+      {"whiten": true}
+    ],
+    "lda": [
+      {"shrinkage": "none"},
+      {"shrinkage": "auto"}
+    ],
+    "pca_lda": [
+      {"pca_components": 50, "shrinkage": "none"},
+      {"pca_components": 100, "shrinkage": "auto"}
+    ],
+    "kpca": [
+      {"gamma": 0.001},
+      {"gamma": 0.01}
+    ],
+    "nmf": [
+      {"init": "nndsvd", "solver": "cd", "max_iter": 200},
+      {"init": "random", "solver": "mu", "max_iter": 200}
+    ],
+    "ica": [
+      {"fun": "logcosh", "max_iter": 400},
+      {"fun": "exp", "max_iter": 400}
+    ],
+    "ae": [
+      {"hidden_dim": 128, "epochs": 2},
+      {"hidden_dim": 256, "epochs": 2}
+    ],
+    "vae": [
+      {"hidden_dim": 128, "epochs": 2, "beta": 1.0},
+      {"hidden_dim": 128, "epochs": 2, "beta": 2.0}
+    ]
+  },
+  "classifier_params": {
+    "knn": {"n_neighbors": 1},
+    "mahalanobis": {"reg": 0.001, "shrinkage": 0.1},
+    "logistic": {"C": 1.0, "max_iter": 1000}
+  },
+  "interpretability": {
+    "ae_d": 16,
+    "ae_epochs": 3
+  }
+}
