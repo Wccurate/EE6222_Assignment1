@@ -1,0 +1,306 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage[numbers,sort&compress]{natbib}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+\title{EE6222 Assignment 1\\Dimensionality Reduction for Classification}
+\author{[Your Name]\\\textit{[Your Matric Number]}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report studies how dimensionality reduction (DR) affects classification performance on high-dimensional image datasets. The current draft is generated from the available run
+\texttt{ee6222\_dr\_quick\_20260226\_161510}, and all sections that depend on not-yet-finished experiments (e.g., full multi-seed run, significance testing) are kept as explicit placeholders.
+\end{abstract}
+
+\section{Introduction}
+High-dimensional visual data usually contain substantial redundancy, strong feature correlation, and noise dimensions that are weakly related to class identity. In this setting, directly training a classifier in the original space can lead to unstable covariance estimation, poor distance geometry, and a high risk of overfitting when the sample size is limited relative to dimensionality. Dimensionality reduction (DR) is therefore not only a compression tool; it is also a way to regularize the representation and shape the bias--variance tradeoff before classification \cite{jiang2011linear,jiang2009asymmetric,jiang2008eigenfeature}.
+
+At the same time, DR is not guaranteed to help. A representation that preserves global variance may still discard low-variance but class-discriminative cues, while a supervised projection may fit training labels well but generalize poorly if the model is insufficiently regularized. The key practical question in this assignment is thus empirical: for a given dataset and classifier, how does test accuracy evolve as the retained dimension $d$ increases, and which methods produce a better accuracy--complexity tradeoff.
+
+This report addresses that question on two image datasets with different data characteristics: Fashion-MNIST and Olivetti Faces. I compare linear, nonlinear, and deep DR families under a leakage-free protocol and report both accuracy and error-rate curves against $d$. The current version is based on the available quick run, which already supports preliminary conclusions and method comparison; sections that depend on full multi-seed experiments are explicitly marked as pending.
+
+\section{Methods and Related Work}
+\subsection{DR Methods}
+Let an input sample be $x \in \mathbb{R}^D$. Each DR model learns a mapping $f_\theta:\mathbb{R}^D \to \mathbb{R}^d$ with $d \ll D$, and the reduced feature is
+\begin{equation}
+z = f_\theta(x).
+\end{equation}
+The method set is designed to cover complementary principles. For linear DR, PCA projects data onto directions of maximal variance, which can be written as
+\begin{equation}
+U_d = \arg\max_{U^\top U = I_d}\mathrm{tr}(U^\top S U), \quad
+z = U_d^\top (x-\mu),
+\end{equation}
+where $S$ is the sample covariance matrix \cite{jolliffe2002pca}. LDA, in contrast, is supervised and seeks maximal between-class separation relative to within-class scatter:
+\begin{equation}
+W = \arg\max_W \frac{|W^\top S_b W|}{|W^\top S_w W|}, \quad d \le C-1,
+\end{equation}
+where $C$ is the number of classes \cite{fisher1936use}. The PCA-LDA pipeline applies PCA first for conditioning and noise suppression, then LDA in the PCA subspace.
+
+To capture nonlinear structure and alternative latent assumptions, this work also evaluates Kernel PCA, NMF, and ICA \cite{scholkopf1998nonlinear,lee1999learning,hyvarinen2000ica}. In Kernel PCA, principal directions are computed in RKHS by solving
+\begin{equation}
+K\alpha_k=\lambda_k\alpha_k,
+\end{equation}
+where $K$ is the kernel Gram matrix. NMF factorizes nonnegative data as
+\begin{equation}
+X \approx WH,\quad W \ge 0,\ H \ge 0,
+\end{equation}
+which often yields parts-based interpretable components in image tasks. ICA assumes a linear mixing model $x=As$ and estimates independent latent sources $s$ from observed data.
+
+Deep DR is represented by AE and VAE \cite{hinton2006reducing,kingma2014autoencoding}. AE learns a deterministic bottleneck by reconstruction minimization:
+\begin{equation}
+\min_\theta \sum_i \|x_i-g_\theta(f_\theta(x_i))\|_2^2.
+\end{equation}
+VAE uses a probabilistic latent variable model and optimizes the ELBO:
+\begin{equation}
+\mathcal{L}_{\text{ELBO}}
+=
+\mathbb{E}_{q_\phi(z|x)}[\log p_\theta(x|z)]
+-D_{\mathrm{KL}}(q_\phi(z|x)\|p(z)).
+\end{equation}
+Compared with AE, VAE typically gives smoother latent structure but may sacrifice discriminative sharpness under short training schedules.
+
+\subsection{Classifiers Used in This Project}
+According to the project implementation and README, all DR features are evaluated with three classifiers: \textbf{1-NN}, \textbf{Mahalanobis}, and \textbf{Logistic Regression}. For a test feature $z$, 1-NN predicts
+\begin{equation}
+\hat y = y_{i^\star}, \quad
+i^\star=\arg\min_i \|z-z_i\|_2 .
+\end{equation}
+Mahalanobis classifier uses class means $\mu_c$ and a shared covariance estimate:
+\begin{equation}
+\hat y=\arg\min_c (z-\mu_c)^\top \Sigma^{-1}(z-\mu_c),
+\end{equation}
+with regularized covariance in practice, e.g. $\Sigma_\lambda=(1-\lambda)\hat\Sigma+\lambda I$, to improve numerical stability. Logistic regression models posterior probabilities as
+\begin{equation}
+p(y=c|z)=
+\frac{\exp(w_c^\top z+b_c)}
+{\sum_j \exp(w_j^\top z+b_j)},
+\quad
+\hat y=\arg\max_c p(y=c|z).
+\end{equation}
+Using the same three classifiers across all DR methods makes the accuracy-vs-$d$ comparison more controlled, because changes can be attributed mainly to representation quality.
+
+\subsection{Datasets}
+The two datasets were selected to provide complementary difficulty profiles. Fashion-MNIST is a large-scale grayscale object dataset with substantial intra-class appearance variation and inter-class visual similarity, making it suitable for observing gradual performance changes across dimensions \cite{xiao2017fashionmnist}. Olivetti Faces, in contrast, has far fewer samples but much higher raw dimensionality per image and strong person-specific structure, which is a typical regime where supervised subspace learning can have large impact \cite{samaria1994parameterisation}.
+
+Using both datasets helps avoid overfitting the narrative to one data regime. If a method performs well on only one dataset, the report can analyze whether the advantage comes from data geometry, class structure, sample size, or model assumptions. This cross-dataset perspective is central to the assignment objective of understanding when DR helps classification and when it does not.
+
+\section{Experimental Setup}
+\subsection{Leakage-Free Protocol}
+All preprocessing and DR model fitting are performed only on training data, with train-only CV for hyperparameter selection; the test set is used only once for final evaluation. This matches the assignment requirements.
+
+\subsection{Current Available Run (Quick)}
+\begin{table}[H]
+\centering
+\caption{Configuration snapshot of the available quick run.}
+\begin{tabular}{ll}
+\toprule
+Item & Value \\
+\midrule
+Run ID & \texttt{ee6222\_dr\_quick\_20260226\_161510} \\
+Datasets & Fashion-MNIST, Olivetti \\
+Seeds & 1 seed (\texttt{seed=0}) \\
+CV folds & 2 \\
+Classifiers & 1-NN, Mahalanobis, Logistic \\
+Methods & PCA, LDA, PCA-LDA, KPCA, NMF, ICA, AE, VAE \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Results from Existing Experiments}
+\subsection{Accuracy and Error Curves vs Dimension}
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/accuracy_vs_d_fashion_mnist.png}
+    \caption{Fashion-MNIST}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/accuracy_vs_d_olivetti.png}
+    \caption{Olivetti}
+  \end{subfigure}
+  \caption{Classification accuracy vs reduced dimension $d$.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/error_vs_d_fashion_mnist.png}
+    \caption{Fashion-MNIST}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/error_vs_d_olivetti.png}
+    \caption{Olivetti}
+  \end{subfigure}
+  \caption{Classification error rate vs reduced dimension $d$.}
+\end{figure}
+
+\subsection{Best Quick Results (Logistic Classifier)}
+\begin{table}[H]
+\centering
+\caption{Fashion-MNIST: best test accuracy per method (quick run, logistic).}
+\begin{tabular}{lcc}
+\toprule
+Method & Best $d$ & Accuracy \\
+\midrule
+AE & 16 & 0.7310 \\
+ICA & 16 & 0.7830 \\
+KPCA & 16 & 0.7480 \\
+LDA & 9 & 0.8100 \\
+NMF & 16 & 0.7560 \\
+PCA & 16 & 0.7850 \\
+PCA-LDA & 9 & 0.7870 \\
+VAE & 16 & 0.4280 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Olivetti: best test accuracy per method (quick run, logistic).}
+\begin{tabular}{lcc}
+\toprule
+Method & Best $d$ & Accuracy \\
+\midrule
+AE & 39 & 0.3750 \\
+ICA & 39 & 0.9000 \\
+KPCA & 39 & 0.6625 \\
+LDA & 39 & 0.9625 \\
+PCA & 39 & 0.9250 \\
+PCA-LDA & 20 & 0.9750 \\
+VAE & 39 & 0.3250 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Current key observations.}
+On Fashion-MNIST, the best quick result is LDA + Logistic at $d=9$ with accuracy 0.8100.  
+On Olivetti, the best quick result is PCA-LDA + Logistic at $d=20$ with accuracy 0.9750.  
+In this run, NMF failed on Olivetti (no valid hyperparameter setting), so those entries are missing and should be revisited in the full run.
+
+\subsection{Interpretability Figures}
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/pca_eigenimages_fashion_mnist.png}
+    \caption{PCA eigenimages: Fashion-MNIST}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/pca_eigenimages_olivetti.png}
+    \caption{PCA eigenimages: Olivetti}
+  \end{subfigure}
+  \caption{PCA component visualization.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/nmf_components_fashion_mnist.png}
+    \caption{NMF components: Fashion-MNIST}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/nmf_components_olivetti.png}
+    \caption{NMF components: Olivetti}
+  \end{subfigure}
+  \caption{NMF basis visualization.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/ae_reconstruction_fashion_mnist_d16.png}
+    \caption{AE reconstruction: Fashion-MNIST}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/ae_reconstruction_olivetti_d16.png}
+    \caption{AE reconstruction: Olivetti}
+  \end{subfigure}
+  \caption{AE reconstruction examples at $d=16$.}
+\end{figure}
+
+\section{Sections Reserved for Pending Results (TBD)}
+\subsection{Full-Config Multi-Seed Summary (TBD)}
+\begin{table}[H]
+\centering
+\caption{Mean$\pm$Std accuracy across seeds for full configuration (to be filled).}
+\begin{tabular}{lcccc}
+\toprule
+Dataset & Method & Best $d$ & Mean Accuracy & Std \\
+\midrule
+Fashion-MNIST & [TBD] & [TBD] & [TBD] & [TBD] \\
+Olivetti & [TBD] & [TBD] & [TBD] & [TBD] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Significance Test (TBD)}
+\begin{table}[H]
+\centering
+\caption{Paired statistical comparison at matched $d$ (to be filled).}
+\begin{tabular}{lccc}
+\toprule
+Comparison & Metric & $p$-value & Conclusion \\
+\midrule
+LDA vs PCA (Fashion-MNIST) & [TBD] & [TBD] & [TBD] \\
+PCA-LDA vs LDA (Olivetti) & [TBD] & [TBD] & [TBD] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Additional Analysis Text (TBD)}
+\begin{itemize}
+  \item [TBD] Why some methods plateau early with increasing $d$.
+  \item [TBD] Why VAE underperforms in quick mode (possible undertraining).
+  \item [TBD] How NMF should be fixed/evaluated on Olivetti.
+  \item [TBD] Robustness across random seeds and split variability.
+\end{itemize}
+
+\section{Conclusion (Draft)}
+The currently available quick run already supports the required core plot-and-analyze workflow for the assignment. Preliminary evidence suggests strong performance from supervised DR (LDA and PCA-LDA), especially on Olivetti. A final high-confidence conclusion still requires the pending full multi-seed run and statistical validation.
+
+\appendix
+\section{Reproducibility Commands}
+\begin{verbatim}
+# quick run
+python -m ee6222_dr.cli run --config configs/quick.json --mode quick --device auto --output outputs/runs
+
+# full run (pending)
+python -m ee6222_dr.cli run --config configs/full.json --mode full --device auto --output outputs/runs
+\end{verbatim}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
