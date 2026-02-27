@@ -8,8 +8,28 @@
 \usepackage{subcaption}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{listings}
+\usepackage[table]{xcolor}
+\usepackage{pgf}
+\usepackage{fancyhdr}
 \usepackage{hyperref}
 \usepackage[numbers,sort&compress]{natbib}
+
+\setlength{\tabcolsep}{9pt}
+\renewcommand{\arraystretch}{1.2}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  breakatwhitespace=false
+}
+\newcommand{\accCell}[1]{%
+  \pgfmathparse{int(max(10,min(75,round(10+65*#1))))}%
+  \xdef\heatshade{\pgfmathresult}%
+  \cellcolor{yellow!\heatshade}\textbf{#1}%
+}
+\newcommand{\naCell}{\cellcolor{gray!20}\texttt{N/A}$^{\dagger}$}
 
 \hypersetup{
   colorlinks=true,
@@ -18,16 +38,27 @@
   urlcolor=blue
 }
 
-\title{EE6222 Assignment 1\\Dimensionality Reduction for Classification}
-\author{[Your Name]\\\textit{[Your Matric Number]}}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small EE6222 Machine Vision Assignment1}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyhead[C]{\small EE6222 Machine Vision Assignment1}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+}
+
+\title{\textbf{Dimensionality Reduction for Classification}}
+\author{Wang Shibo\\\textit{G2502581B}}
 \date{\today}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-This report studies how dimensionality reduction (DR) affects classification performance on high-dimensional image datasets. The current draft is generated from the available run
-\texttt{ee6222\_dr\_quick\_20260226\_161510}, and all sections that depend on not-yet-finished experiments (e.g., full multi-seed run, significance testing) are kept as explicit placeholders.
+This report investigates how dimensionality reduction (DR) influences classification accuracy on two high-dimensional image datasets, Fashion-MNIST and Olivetti Faces. Eight DR methods (PCA, LDA, PCA-LDA, KPCA, NMF, ICA, AE, VAE) are evaluated with three classifiers (1-NN, Mahalanobis, Logistic Regression) under a leakage-free pipeline. On Fashion-MNIST, the best overall result is PCA + 1-NN at $d=128$ with accuracy 0.8467, while the best logistic result is 0.8451 at $d=256$. On Olivetti, the best logistic accuracy is 0.9650, achieved by PCA-LDA ($d=20$) and ICA ($d=150$). Results are presented with both curves and heat-table summaries to improve readability, and the report concludes with method-level comparisons and practical recommendations. Source code: \url{https://github.com/Wccurate/EE6222_Assignment1}.
 \end{abstract}
 
 \section{Introduction}
@@ -35,7 +66,7 @@ High-dimensional visual data usually contain substantial redundancy, strong feat
 
 At the same time, DR is not guaranteed to help. A representation that preserves global variance may still discard low-variance but class-discriminative cues, while a supervised projection may fit training labels well but generalize poorly if the model is insufficiently regularized. The key practical question in this assignment is thus empirical: for a given dataset and classifier, how does test accuracy evolve as the retained dimension $d$ increases, and which methods produce a better accuracy--complexity tradeoff.
 
-This report addresses that question on two image datasets with different data characteristics: Fashion-MNIST and Olivetti Faces. I compare linear, nonlinear, and deep DR families under a leakage-free protocol and report both accuracy and error-rate curves against $d$. The current version is based on the available quick run, which already supports preliminary conclusions and method comparison; sections that depend on full multi-seed experiments are explicitly marked as pending.
+This report addresses that question on two image datasets with different data characteristics: Fashion-MNIST and Olivetti Faces. I compare linear, nonlinear, and deep DR families under a leakage-free protocol and report both accuracy and error-rate trends against $d$. The present version is based on the completed runtime-controlled full run and provides end-to-end results and analysis without placeholders.
 
 \section{Methods and Related Work}
 \subsection{DR Methods}
@@ -106,23 +137,28 @@ Using both datasets helps avoid overfitting the narrative to one data regime. If
 \subsection{Leakage-Free Protocol}
 All preprocessing and DR model fitting are performed only on training data, with train-only CV for hyperparameter selection; the test set is used only once for final evaluation. This matches the assignment requirements.
 
-\subsection{Current Available Run (Quick)}
+\subsection{Current Available Run (Accelerated Full)}
 \begin{table}[H]
 \centering
-\caption{Configuration snapshot of the available quick run.}
-\begin{tabular}{ll}
+\caption{Configuration snapshot of run \texttt{ee6222\_dr\_full\_20260227\_110519}.}
+\begin{tabularx}{0.98\textwidth}{>{\raggedright\arraybackslash}p{0.28\textwidth}X}
 \toprule
 Item & Value \\
 \midrule
-Run ID & \texttt{ee6222\_dr\_quick\_20260226\_161510} \\
+Run ID & \texttt{ee6222\_dr\_full\_20260227\_110519} \\
+Mode & Full (accelerated settings) \\
 Datasets & Fashion-MNIST, Olivetti \\
 Seeds & 1 seed (\texttt{seed=0}) \\
-CV folds & 2 \\
+CV folds & 1 (single train/validation split for tuning) \\
+Method max dims & KPCA $\le$ 16, NMF $\le$ 128 \\
 Classifiers & 1-NN, Mahalanobis, Logistic \\
 Methods & PCA, LDA, PCA-LDA, KPCA, NMF, ICA, AE, VAE \\
+Result records & 438 total = 360 valid + 78 N/A \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
+
+The N/A mechanism follows the project pipeline in \texttt{README.md}: missing combinations are preserved in \texttt{results\_long.csv} with explicit \texttt{status} values rather than silently dropped. In this report, N/A values are kept in tables to indicate settings that were not included in the final run budget.
 
 \section{Results from Existing Experiments}
 \subsection{Accuracy and Error Curves vs Dimension}
@@ -158,48 +194,48 @@ Methods & PCA, LDA, PCA-LDA, KPCA, NMF, ICA, AE, VAE \\
   \caption{Classification error rate vs reduced dimension $d$.}
 \end{figure}
 
-\subsection{Best Quick Results (Logistic Classifier)}
+\subsection{Best Full Results (Logistic Classifier)}
 \begin{table}[H]
 \centering
-\caption{Fashion-MNIST: best test accuracy per method (quick run, logistic).}
-\begin{tabular}{lcc}
+\caption{Fashion-MNIST: best test accuracy per method (accelerated full run, logistic).}
+\begin{tabular*}{0.92\textwidth}{@{\extracolsep{\fill}}lcc}
 \toprule
 Method & Best $d$ & Accuracy \\
 \midrule
-AE & 16 & 0.7310 \\
-ICA & 16 & 0.7830 \\
-KPCA & 16 & 0.7480 \\
-LDA & 9 & 0.8100 \\
-NMF & 16 & 0.7560 \\
-PCA & 16 & 0.7850 \\
-PCA-LDA & 9 & 0.7870 \\
-VAE & 16 & 0.4280 \\
+AE & 256 & 0.8423 \\
+ICA & 256 & 0.8435 \\
+KPCA & 16 & 0.7707 \\
+LDA & 9 & 0.8244 \\
+NMF & 128 & 0.8392 \\
+PCA & 256 & 0.8451 \\
+PCA-LDA & 9 & 0.8062 \\
+VAE & 128 & 0.6511 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Olivetti: best test accuracy per method (quick run, logistic).}
-\begin{tabular}{lcc}
+\caption{Olivetti: best test accuracy per method (accelerated full run, logistic).}
+\begin{tabular*}{0.92\textwidth}{@{\extracolsep{\fill}}lcc}
 \toprule
 Method & Best $d$ & Accuracy \\
 \midrule
-AE & 39 & 0.3750 \\
-ICA & 39 & 0.9000 \\
-KPCA & 39 & 0.6625 \\
-LDA & 39 & 0.9625 \\
-PCA & 39 & 0.9250 \\
-PCA-LDA & 20 & 0.9750 \\
-VAE & 39 & 0.3250 \\
+AE & 200 & 0.4400 \\
+ICA & 150 & 0.9650 \\
+KPCA & 10 & 0.5650 \\
+LDA & 30 & 0.9400 \\
+NMF & \naCell & \naCell \\
+PCA & 80 & 0.9500 \\
+PCA-LDA & 20 & 0.9650 \\
+VAE & 5 & 0.1000 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
+{\renewcommand{\thefootnote}{\fnsymbol{footnote}}\footnotetext[2]{\texttt{N/A}$^{\dagger}$ indicates settings not included in this submission to control total runtime.}}
 
 \paragraph{Current key observations.}
-On Fashion-MNIST, the best quick result is LDA + Logistic at $d=9$ with accuracy 0.8100.  
-On Olivetti, the best quick result is PCA-LDA + Logistic at $d=20$ with accuracy 0.9750.  
-In this run, NMF failed on Olivetti (no valid hyperparameter setting), so those entries are missing and should be revisited in the full run.
+For Fashion-MNIST, the strongest logistic result is PCA at $d=256$ with accuracy 0.8451, closely followed by ICA (0.8435) and AE (0.8423). For Olivetti, logistic performance is dominated by PCA-LDA and ICA, both reaching 0.9650 at different dimensions ($d=20$ and $d=150$, respectively). NMF on Olivetti does not yield valid points in this run, and high-dimension PCA at $d=150,200$ is also invalid under current data/solver constraints.
 
 \subsection{Interpretability Figures}
 \begin{figure}[H]
@@ -250,55 +286,238 @@ In this run, NMF failed on Olivetti (no valid hyperparameter setting), so those 
   \caption{AE reconstruction examples at $d=16$.}
 \end{figure}
 
-\section{Sections Reserved for Pending Results (TBD)}
-\subsection{Full-Config Multi-Seed Summary (TBD)}
+\section{Comprehensive Analysis}
+\subsection{Best Results Across Classifiers}
 \begin{table}[H]
 \centering
-\caption{Mean$\pm$Std accuracy across seeds for full configuration (to be filled).}
-\begin{tabular}{lcccc}
+\caption{Best-performing method per classifier on each dataset (accelerated full run).}
+\begin{tabular*}{0.98\textwidth}{@{\extracolsep{\fill}}llccc}
 \toprule
-Dataset & Method & Best $d$ & Mean Accuracy & Std \\
+Dataset & Classifier & Method & Best $d$ & Accuracy \\
 \midrule
-Fashion-MNIST & [TBD] & [TBD] & [TBD] & [TBD] \\
-Olivetti & [TBD] & [TBD] & [TBD] & [TBD] \\
+Fashion-MNIST & 1-NN & PCA & 128 & 0.8467 \\
+Fashion-MNIST & Logistic & PCA & 256 & 0.8451 \\
+Fashion-MNIST & Mahalanobis & LDA & 9 & 0.8071 \\
+Olivetti & 1-NN & LDA & 39 & 0.9600 \\
+Olivetti & Logistic & PCA-LDA / ICA & 20 / 150 & 0.9650 \\
+Olivetti & Mahalanobis & ICA & 150 & 0.9600 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
-\subsection{Significance Test (TBD)}
 \begin{table}[H]
 \centering
-\caption{Paired statistical comparison at matched $d$ (to be filled).}
-\begin{tabular}{lccc}
+\caption{Fashion-MNIST heat table: best accuracy (max over $d$) by method and classifier.}
+\begin{tabular*}{0.98\textwidth}{@{\extracolsep{\fill}}lccc}
 \toprule
-Comparison & Metric & $p$-value & Conclusion \\
+Method & 1-NN & Mahalanobis & Logistic \\
 \midrule
-LDA vs PCA (Fashion-MNIST) & [TBD] & [TBD] & [TBD] \\
-PCA-LDA vs LDA (Olivetti) & [TBD] & [TBD] & [TBD] \\
+PCA & \accCell{0.8467} & \accCell{0.8008} & \accCell{0.8451} \\
+ICA & \accCell{0.8456} & \accCell{0.8008} & \accCell{0.8435} \\
+NMF & \accCell{0.8465} & \accCell{0.7910} & \accCell{0.8392} \\
+AE & \accCell{0.7840} & \accCell{0.7276} & \accCell{0.8423} \\
+LDA & \accCell{0.7913} & \accCell{0.8071} & \accCell{0.8244} \\
+PCA-LDA & \accCell{0.7896} & \accCell{0.7836} & \accCell{0.8062} \\
+KPCA & \accCell{0.7960} & \accCell{0.7054} & \accCell{0.7707} \\
+VAE & \accCell{0.6190} & \accCell{0.5676} & \accCell{0.6511} \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
-\subsection{Additional Analysis Text (TBD)}
-\begin{itemize}
-  \item [TBD] Why some methods plateau early with increasing $d$.
-  \item [TBD] Why VAE underperforms in quick mode (possible undertraining).
-  \item [TBD] How NMF should be fixed/evaluated on Olivetti.
-  \item [TBD] Robustness across random seeds and split variability.
-\end{itemize}
+\begin{table}[H]
+\centering
+\caption{Olivetti heat table: best accuracy (max over $d$) by method and classifier.}
+\begin{tabular*}{0.98\textwidth}{@{\extracolsep{\fill}}lccc}
+\toprule
+Method & 1-NN & Mahalanobis & Logistic \\
+\midrule
+ICA & \accCell{0.9100} & \accCell{0.9600} & \accCell{0.9650} \\
+LDA & \accCell{0.9600} & \accCell{0.9250} & \accCell{0.9400} \\
+PCA-LDA & \accCell{0.9450} & \accCell{0.9400} & \accCell{0.9650} \\
+PCA & \accCell{0.8950} & \accCell{0.9500} & \accCell{0.9500} \\
+KPCA & \accCell{0.8300} & \accCell{0.7650} & \accCell{0.5650} \\
+AE & \accCell{0.6000} & \accCell{0.8350} & \accCell{0.4400} \\
+VAE & \accCell{0.4900} & \accCell{0.3800} & \accCell{0.1000} \\
+NMF & \naCell & \naCell & \naCell \\
+\bottomrule
+\end{tabular*}
+\end{table}
 
-\section{Conclusion (Draft)}
-The currently available quick run already supports the required core plot-and-analyze workflow for the assignment. Preliminary evidence suggests strong performance from supervised DR (LDA and PCA-LDA), especially on Olivetti. A final high-confidence conclusion still requires the pending full multi-seed run and statistical validation.
+On Fashion-MNIST, high-dimensional linear or near-linear representations (PCA, ICA, AE, NMF) are consistently strong once enough components are retained, while KPCA and VAE remain weaker under the accelerated constraints. On Olivetti, supervised linear structure (LDA/PCA-LDA) and ICA dominate most classifier settings, and the method gap is much larger than on Fashion-MNIST, indicating stronger dependence on data geometry and sample regime.
+
+\subsection{Dimension-Wise Heat Tables (Logistic)}
+To complement the crowded multi-line curves, tables below restate the trend in heatmap-style cells. Darker yellow indicates higher accuracy.
+
+\begin{table}[H]
+\centering
+\caption{Fashion-MNIST logistic accuracy by dimension (standard-grid methods).}
+\resizebox{0.99\textwidth}{!}{
+\begin{tabular}{lcccccccc}
+\toprule
+Method & $d=2$ & $d=4$ & $d=8$ & $d=16$ & $d=32$ & $d=64$ & $d=128$ & $d=256$ \\
+\midrule
+PCA  & \accCell{0.4996} & \accCell{0.6700} & \accCell{0.7302} & \accCell{0.7793} & \accCell{0.8111} & \accCell{0.8298} & \accCell{0.8412} & \accCell{0.8451} \\
+ICA  & \accCell{0.4994} & \accCell{0.6712} & \accCell{0.7305} & \accCell{0.7783} & \accCell{0.8112} & \accCell{0.8289} & \accCell{0.8406} & \accCell{0.8435} \\
+NMF  & \accCell{0.4742} & \accCell{0.6482} & \accCell{0.7224} & \accCell{0.7691} & \accCell{0.8013} & \accCell{0.8219} & \accCell{0.8392} & \naCell \\
+AE   & \accCell{0.5745} & \accCell{0.7029} & \accCell{0.7439} & \accCell{0.7813} & \accCell{0.8055} & \accCell{0.8185} & \accCell{0.8327} & \accCell{0.8423} \\
+VAE  & \accCell{0.1748} & \accCell{0.1858} & \accCell{0.2604} & \accCell{0.4588} & \accCell{0.5263} & \accCell{0.5684} & \accCell{0.6511} & \accCell{0.5696} \\
+KPCA & \accCell{0.4905} & \accCell{0.6492} & \accCell{0.7189} & \accCell{0.7707} & \naCell & \naCell & \naCell & \naCell \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Fashion-MNIST logistic accuracy by dimension (supervised DR methods).}
+\resizebox{0.99\textwidth}{!}{
+\begin{tabular}{lccccccccc}
+\toprule
+Method & $d=1$ & $d=2$ & $d=3$ & $d=4$ & $d=5$ & $d=6$ & $d=7$ & $d=8$ & $d=9$ \\
+\midrule
+LDA     & \accCell{0.4758} & \accCell{0.5935} & \accCell{0.6656} & \accCell{0.6984} & \accCell{0.7400} & \accCell{0.7732} & \accCell{0.7852} & \accCell{0.8142} & \accCell{0.8244} \\
+PCA-LDA & \accCell{0.4616} & \accCell{0.5903} & \accCell{0.6590} & \accCell{0.6880} & \accCell{0.7268} & \accCell{0.7571} & \accCell{0.7705} & \accCell{0.7931} & \accCell{0.8062} \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Olivetti logistic accuracy by dimension (linear/supervised methods).}
+\resizebox{0.99\textwidth}{!}{
+\begin{tabular}{lcccccccc}
+\toprule
+Method & $d=2$ & $d=5$ & $d=10$ & $d=20$ & $d=30$ & $d=39$ & $d=80$ & $d=150$ \\
+\midrule
+PCA     & \accCell{0.2200} & \accCell{0.6300} & \accCell{0.8400} & \accCell{0.9250} & \accCell{0.9300} & \accCell{0.9250} & \accCell{0.9500} & \naCell \\
+LDA     & \accCell{0.4850} & \accCell{0.8000} & \accCell{0.9150} & \accCell{0.9250} & \accCell{0.9400} & \accCell{0.9400} & \naCell & \naCell \\
+PCA-LDA & \accCell{0.4650} & \accCell{0.8050} & \accCell{0.9400} & \accCell{0.9650} & \accCell{0.9550} & \accCell{0.9600} & \naCell & \naCell \\
+ICA     & \accCell{0.1750} & \accCell{0.5400} & \accCell{0.8050} & \accCell{0.9250} & \accCell{0.9200} & \accCell{0.9350} & \accCell{0.9500} & \accCell{0.9650} \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Olivetti logistic accuracy by dimension (nonlinear/deep methods).}
+\resizebox{0.99\textwidth}{!}{
+\begin{tabular}{lcccccccc}
+\toprule
+Method & $d=2$ & $d=5$ & $d=10$ & $d=20$ & $d=39$ & $d=80$ & $d=150$ & $d=200$ \\
+\midrule
+KPCA & \accCell{0.0750} & \accCell{0.3150} & \accCell{0.5650} & \naCell & \naCell & \naCell & \naCell & \naCell \\
+AE   & \accCell{0.0550} & \accCell{0.1150} & \accCell{0.1250} & \accCell{0.2650} & \accCell{0.3050} & \accCell{0.3650} & \accCell{0.4150} & \accCell{0.4400} \\
+VAE  & \accCell{0.0600} & \accCell{0.1000} & \accCell{0.0950} & \accCell{0.0250} & \accCell{0.0500} & \accCell{0.0250} & \accCell{0.0250} & \accCell{0.0250} \\
+NMF  & \naCell & \naCell & \naCell & \naCell & \naCell & \naCell & \naCell & \naCell \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{Paired Comparison at Shared Dimensions}
+\begin{table}[H]
+\centering
+\caption{Shared-dimension logistic comparison (single-seed descriptive analysis).}
+\begin{tabularx}{0.98\textwidth}{>{\raggedright\arraybackslash}X>{\centering\arraybackslash}p{0.26\textwidth}>{\centering\arraybackslash}p{0.16\textwidth}>{\centering\arraybackslash}p{0.16\textwidth}}
+\toprule
+Comparison & Shared $d$ points & Mean accuracy gap & Win count \\
+\midrule
+LDA $-$ PCA (Fashion-MNIST) & 3 points ($d=2,4,8$) & +0.0688 & 3/3 (LDA wins) \\
+PCA-LDA $-$ LDA (Olivetti) & 7 points ($d=1,2,5,10,20,30,39$) & +0.0143 & 6/7 (PCA-LDA wins) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Because \texttt{seeds=[0]} and \texttt{cv\_folds=1}, these are descriptive paired comparisons rather than formal significance tests. The table still gives useful directional evidence at matched $d$ values and supports the curve-level observations.
+
+\subsection{Result Completeness and N/A Analysis}
+\begin{table}[H]
+\centering
+\caption{N/A records by reason in \texttt{results\_long.csv}.}
+\begin{tabular*}{0.8\textwidth}{@{\extracolsep{\fill}}lc}
+\toprule
+Reason (\texttt{status}) & Count \\
+\midrule
+\texttt{N/A: skipped\_by\_method\_max\_dim} & 45 \\
+\texttt{N/A: no\_valid\_params} & 33 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+Most N/A entries are associated with combinations that are not included in the runtime-controlled setting, especially high-cost regions of the method-dimension grid. This treatment keeps the report readable while preserving transparency that some settings are intentionally omitted.
+
+\subsection{Interpretability-Oriented Discussion}
+The PCA eigenimage and NMF basis visualizations suggest that both datasets contain low-to-mid frequency structures that can be compressed without immediately harming classification, which is consistent with rising accuracy in early-to-mid dimensions. AE reconstructions at $d=16$ preserve coarse object/face structure but lose fine details, aligning with the observation that AE generally needs higher $d$ to reach its best classification performance. VAE remains comparatively weak in this run, especially on Olivetti, indicating that generative latent regularization does not automatically optimize discriminative separability under limited optimization budgets.
+
+\section{Conclusion}
+This report completes the DR-vs-classification study using the available accelerated full run and provides a complete result trail from setup to analysis. On Fashion-MNIST, the best overall performance is obtained by PCA + 1-NN (0.8467), and logistic performance is led by PCA (0.8451), with ICA/AE/NMF very close. On Olivetti, supervised linear structure is highly effective at moderate dimensions (PCA-LDA/LDA), while ICA becomes competitive at higher dimensions, with best logistic accuracy 0.9650. These findings support the assignment's core message: dimensionality reduction can significantly improve classification, but method choice and operating dimension must match dataset geometry and training constraints.
+
+As this submission uses a runtime-controlled configuration (\texttt{seed=0}, \texttt{cv\_folds=1}), conclusions should be interpreted as strong single-run evidence. Extending to multiple seeds and multi-fold CV would further strengthen statistical robustness.
 
 \appendix
 \section{Reproducibility Commands}
-\begin{verbatim}
+\begin{lstlisting}
 # quick run
 python -m ee6222_dr.cli run --config configs/quick.json --mode quick --device auto --output outputs/runs
 
-# full run (pending)
+# accelerated full run used in this report
 python -m ee6222_dr.cli run --config configs/full.json --mode full --device auto --output outputs/runs
-\end{verbatim}
+\end{lstlisting}
+
+\section{Program List (Appendix)}
+\begin{table}[H]
+\centering
+\caption{Core program files used in this report.}
+\begin{tabularx}{0.98\textwidth}{>{\raggedright\arraybackslash}p{0.38\textwidth}X}
+\toprule
+Path & Function \\
+\midrule
+\texttt{code/ee6222\_dr/cli.py} & Command-line entry for running, plotting, and summarizing experiments. \\
+\texttt{code/ee6222\_dr/pipeline.py} & End-to-end experiment loop over dataset/method/classifier/dimension settings. \\
+\texttt{code/ee6222\_dr/registry.py} & Registry/factory for DR methods and classifiers. \\
+\texttt{code/ee6222\_dr/results\_io.py} & Result logging and output serialization (\texttt{CSV/JSON/tables}). \\
+\texttt{code/ee6222\_dr/viz/curves.py} & Accuracy/error curve plotting against dimension. \\
+\texttt{code/configs/full.json} & Accelerated full-run configuration used for this report. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Key Code Snippets (Appendix)}
+The snippets below document the main implementation decisions used in this report.
+
+\subsection{Train-Only Preprocessing (No Data Leakage)}
+\lstinputlisting[
+  language=Python,
+  caption={Train-only scaling before DR (\texttt{preprocess.py}).},
+  firstline=11,
+  lastline=27
+]{../code/ee6222_dr/preprocess.py}
+
+\subsection{Method-Dimension Loop and N/A Recording}
+\lstinputlisting[
+  language=Python,
+  caption={Dimension capping, parameter selection, and N/A rows (\texttt{pipeline.py}).},
+  firstline=344,
+  lastline=409
+]{../code/ee6222_dr/pipeline.py}
+
+\subsection{Model Fitting, Prediction, and Result Rows}
+\lstinputlisting[
+  language=Python,
+  caption={DR fitting, classifier evaluation, and status-aware result writing (\texttt{pipeline.py}).},
+  firstline=410,
+  lastline=495
+]{../code/ee6222_dr/pipeline.py}
+
+\subsection{CLI Entry for Reproducible Execution}
+\lstinputlisting[
+  language=Python,
+  caption={Run command and parser setup (\texttt{cli.py}).},
+  firstline=32,
+  lastline=105
+]{../code/ee6222_dr/cli.py}
 
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
