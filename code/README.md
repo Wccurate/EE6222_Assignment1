@@ -17,11 +17,11 @@ and classification experiments used in EE6222 Assignment 1.
 
 ## 2. Environment Setup
 
-Python 3.10+ is recommended.
+Use Conda (Miniconda or Anaconda) with Python 3.10.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+conda create -n ee6222-dr python=3.10 -y
+conda activate ee6222-dr
 pip install -r requirements.txt
 ```
 
@@ -37,6 +37,12 @@ outputs/runs/       # experiment artifacts
 ```
 
 ## 4. Running Experiments
+
+Activate the environment before running any command:
+
+```bash
+conda activate ee6222-dr
+```
 
 ### 4.1 Quick run
 
@@ -139,3 +145,4 @@ curves quickly.
 - Datasets are downloaded automatically on first run.
 - `full` mode can be expensive; verify environment with `quick` first.
 - `--device auto` uses CUDA when available and falls back to CPU.
+- If `conda activate` is not available in your shell, run `conda init` once and reopen the terminal.

@@ -14,8 +14,8 @@ Detailed usage for the experiment project is in [code/README.md](code/README.md)
 
 ```bash
 cd code
-python -m venv .venv
-source .venv/bin/activate
+conda create -n ee6222-dr python=3.10 -y
+conda activate ee6222-dr
 pip install -r requirements.txt
 bash scripts/run_quick.sh
 ```
@@ -25,5 +25,5 @@ bash scripts/run_quick.sh
 The root `.gitignore` already excludes:
 - local editor settings
 - macOS system files
-- Python cache and virtual environments
+- Python cache and Conda environments
 - TeX intermediate build artifacts
