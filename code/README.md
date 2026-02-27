@@ -49,6 +49,27 @@ bash scripts/run_quick.sh
 bash scripts/run_full.sh
 ```
 
+### 4.2.1 当前 full 加速配置（已落地）
+
+为缩短 full 运行时间，当前仓库中的 `configs/full.json` 已启用以下设置：
+
+- `seeds: [0]`（只跑一个随机种子）
+- `cv_folds: 1`（快速模式：单次分层 holdout，而非多折 CV）
+- `method_max_dims.kpca: 16`（KPCA 最高只跑到 16 维）
+- `method_max_dims.nmf: 128`（NMF 最高只跑到 128 维）
+
+### 4.2.2 缺失结果的记录方式
+
+- 对于被维度上限裁掉、参数无效、拟合失败、分类器失败等情况，`results_long.csv` 会补一行占位记录：
+  - `accuracy = N/A`
+  - `error_rate = N/A`
+  - `cv_score = N/A`
+  - `status` 字段给出原因（如 `N/A: skipped_by_method_max_dim`）
+- 画图与 summary/table 会自动跳过 `N/A` 行，保证流程可继续执行。
+- `summary.json` 额外提供：
+  - `num_valid_records`
+  - `num_na_records`
+
 ### 4.3 CLI 分步运行
 
 ```bash
