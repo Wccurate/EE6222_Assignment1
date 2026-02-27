@@ -1,11 +1,11 @@
-numpy
+# numpy
 scipy
 pandas
 scikit-learn
 matplotlib
 seaborn
-torch
-torchvision
+# torch
+# torchvision
 tqdm
 joblib
 pytest

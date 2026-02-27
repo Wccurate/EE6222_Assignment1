@@ -60,7 +60,13 @@ def _expand_param_grid(grid_spec: Any) -> list[dict[str, Any]]:
     raise ValueError(f"Unsupported grid spec: {type(grid_spec)}")
 
 
-def _get_method_d_grid(cfg: dict[str, Any], dataset: str, method: str) -> list[int]:
+def _get_method_d_grid(
+    cfg: dict[str, Any],
+    dataset: str,
+    method: str,
+    *,
+    apply_method_max: bool = True,
+) -> list[int]:
     """Return method-specific d-grid for a dataset."""
     override = cfg.get("method_d_overrides", {}).get(method, {})
     if dataset in override:
@@ -74,7 +80,77 @@ def _get_method_d_grid(cfg: dict[str, Any], dataset: str, method: str) -> list[i
         cap = get_dataset_num_classes(dataset) - 1
         dims = [d for d in dims if d <= cap]
 
+    if apply_method_max:
+        max_dim = cfg.get("method_max_dims", {}).get(method)
+        if max_dim is not None:
+            dims = [d for d in dims if d <= int(max_dim)]
+
     return dims
+
+
+def _build_result_row(
+    *,
+    dataset: str,
+    seed: int,
+    method: str,
+    classifier: str,
+    d: int,
+    accuracy: float | str,
+    error_rate: float | str,
+    best_params: str,
+    tune_classifier: str,
+    cv_score: float | str,
+    status: str,
+) -> dict[str, Any]:
+    """Create one output record row."""
+    return {
+        "dataset": dataset,
+        "seed": seed,
+        "method": method,
+        "classifier": classifier,
+        "d": int(d),
+        "accuracy": accuracy,
+        "error_rate": error_rate,
+        "best_params": best_params,
+        "tune_classifier": tune_classifier,
+        "cv_score": cv_score,
+        "status": status,
+    }
+
+
+def _build_na_row(
+    *,
+    dataset: str,
+    seed: int,
+    method: str,
+    classifier: str,
+    d: int,
+    tune_classifier: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Create one placeholder row for unavailable result."""
+    return _build_result_row(
+        dataset=dataset,
+        seed=seed,
+        method=method,
+        classifier=classifier,
+        d=d,
+        accuracy="N/A",
+        error_rate="N/A",
+        best_params="N/A",
+        tune_classifier=tune_classifier,
+        cv_score="N/A",
+        status=reason,
+    )
+
+
+def _coerce_numeric_results(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert metric columns to numeric for plotting/summarization."""
+    out = df.copy()
+    for col in ("accuracy", "error_rate", "cv_score"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out
 
 
 def _effective_cv_folds(y: np.ndarray, requested_folds: int) -> int:
@@ -83,6 +159,8 @@ def _effective_cv_folds(y: np.ndarray, requested_folds: int) -> int:
     min_count = int(counts.min())
     if min_count < 2:
         raise ValueError("At least two samples per class are required for stratified CV")
+    if requested_folds <= 1:
+        return 1
     return min(requested_folds, min_count)
 
 
@@ -102,10 +180,14 @@ def _evaluate_candidate_params(
 ) -> float:
     """Cross-validated score for one (method, d, params)."""
     folds = _effective_cv_folds(y_train, cv_folds)
-    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
+    if folds == 1:
+        # Fast mode: run a single stratified holdout split.
+        split_iter = [next(StratifiedKFold(n_splits=2, shuffle=True, random_state=random_state).split(X_train, y_train))]
+    else:
+        split_iter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state).split(X_train, y_train)
 
     scores: list[float] = []
-    for train_idx, val_idx in splitter.split(X_train, y_train):
+    for train_idx, val_idx in split_iter:
         X_tr = X_train[train_idx]
         y_tr = y_train[train_idx]
         X_val = X_train[val_idx]
@@ -260,9 +342,30 @@ def run_experiments(
             )
 
             for method in cfg["methods"]:
-                d_grid = _get_method_d_grid(cfg, dataset, method)
+                d_grid_base = _get_method_d_grid(cfg, dataset, method, apply_method_max=False)
+                d_grid = _get_method_d_grid(cfg, dataset, method, apply_method_max=True)
+
+                if not d_grid_base:
+                    logger.warning("Skip %s on %s: empty configured d-grid", method, dataset)
+                    continue
+
+                capped_dims = sorted(set(d_grid_base) - set(d_grid))
+                for d in capped_dims:
+                    for clf_name in cfg["classifiers"]:
+                        rows.append(
+                            _build_na_row(
+                                dataset=dataset,
+                                seed=seed,
+                                method=method,
+                                classifier=clf_name,
+                                d=d,
+                                tune_classifier=tune_classifier,
+                                reason="N/A: skipped_by_method_max_dim",
+                            )
+                        )
+
                 if not d_grid:
-                    logger.warning("Skip %s on %s: empty valid d-grid", method, dataset)
+                    logger.warning("Skip %s on %s: all d capped by method_max_dims", method, dataset)
                     continue
 
                 param_candidates = _expand_param_grid(cfg.get("method_grids", {}).get(method, [{}]))
@@ -290,6 +393,18 @@ def run_experiments(
                             seed,
                             d,
                         )
+                        for clf_name in cfg["classifiers"]:
+                            rows.append(
+                                _build_na_row(
+                                    dataset=dataset,
+                                    seed=seed,
+                                    method=method,
+                                    classifier=clf_name,
+                                    d=d,
+                                    tune_classifier=tune_classifier,
+                                    reason="N/A: no_valid_params",
+                                )
+                            )
                         continue
 
                     try:
@@ -312,8 +427,21 @@ def run_experiments(
                             str(exc),
                         )
                         logger.debug(traceback.format_exc())
+                        for clf_name in cfg["classifiers"]:
+                            rows.append(
+                                _build_na_row(
+                                    dataset=dataset,
+                                    seed=seed,
+                                    method=method,
+                                    classifier=clf_name,
+                                    d=d,
+                                    tune_classifier=tune_classifier,
+                                    reason="N/A: fit_failed",
+                                )
+                            )
                         continue
 
+                    best_params_str = json.dumps(selection.best_params, sort_keys=True)
                     for clf_name in cfg["classifiers"]:
                         try:
                             clf_params = cfg.get("classifier_params", {}).get(clf_name, {})
@@ -328,18 +456,19 @@ def run_experiments(
                             acc, err = compute_accuracy_and_error(split.y_test, y_pred)
 
                             rows.append(
-                                {
-                                    "dataset": dataset,
-                                    "seed": seed,
-                                    "method": method,
-                                    "classifier": clf_name,
-                                    "d": int(d),
-                                    "accuracy": acc,
-                                    "error_rate": err,
-                                    "best_params": json.dumps(selection.best_params, sort_keys=True),
-                                    "tune_classifier": tune_classifier,
-                                    "cv_score": selection.best_score,
-                                }
+                                _build_result_row(
+                                    dataset=dataset,
+                                    seed=seed,
+                                    method=method,
+                                    classifier=clf_name,
+                                    d=d,
+                                    accuracy=acc,
+                                    error_rate=err,
+                                    best_params=best_params_str,
+                                    tune_classifier=tune_classifier,
+                                    cv_score=selection.best_score,
+                                    status="ok",
+                                )
                             )
                         except Exception as exc:
                             logger.warning(
@@ -352,12 +481,25 @@ def run_experiments(
                                 str(exc),
                             )
                             logger.debug(traceback.format_exc())
+                            rows.append(
+                                _build_na_row(
+                                    dataset=dataset,
+                                    seed=seed,
+                                    method=method,
+                                    classifier=clf_name,
+                                    d=d,
+                                    tune_classifier=tune_classifier,
+                                    reason="N/A: classifier_failed",
+                                )
+                            )
 
     results_path = save_results_long(run_dir, rows)
-    df = pd.read_csv(results_path)
+    df_raw = pd.read_csv(results_path)
+    df = _coerce_numeric_results(df_raw)
+    valid_df = df[df["accuracy"].notna() & df["error_rate"].notna()].copy()
 
-    curve_paths = plot_accuracy_error_curves(df, run_dir / "figures") if not df.empty else []
-    table_paths = save_best_results_tables(df, run_dir / "tables") if not df.empty else []
+    curve_paths = plot_accuracy_error_curves(valid_df, run_dir / "figures") if not valid_df.empty else []
+    table_paths = save_best_results_tables(valid_df, run_dir / "tables") if not valid_df.empty else []
 
     interpret_paths: list[Path] = []
     for dataset, split in dataset_for_interpret.items():
@@ -378,7 +520,9 @@ def run_experiments(
             logger.debug(traceback.format_exc())
 
     summary = {
-        "num_records": int(df.shape[0]),
+        "num_records": int(df_raw.shape[0]),
+        "num_valid_records": int(valid_df.shape[0]),
+        "num_na_records": int(df_raw.shape[0] - valid_df.shape[0]),
         "datasets": cfg["datasets"],
         "methods": cfg["methods"],
         "classifiers": cfg["classifiers"],
@@ -389,9 +533,9 @@ def run_experiments(
         "tables": [str(p) for p in table_paths],
     }
 
-    if not df.empty:
+    if not valid_df.empty:
         best = (
-            df.sort_values("accuracy", ascending=False)
+            valid_df.sort_values("accuracy", ascending=False)
             .groupby(["dataset", "method", "classifier"], as_index=False)
             .first()
         )
@@ -408,18 +552,22 @@ def summarize_from_run_dir(run_dir: str | Path) -> dict[str, Any]:
     if not results_path.exists():
         raise FileNotFoundError(f"Missing results file: {results_path}")
 
-    df = pd.read_csv(results_path)
-    table_paths = save_best_results_tables(df, run_dir / "tables") if not df.empty else []
+    df_raw = pd.read_csv(results_path)
+    df = _coerce_numeric_results(df_raw)
+    valid_df = df[df["accuracy"].notna() & df["error_rate"].notna()].copy()
+    table_paths = save_best_results_tables(valid_df, run_dir / "tables") if not valid_df.empty else []
 
     summary = {
-        "num_records": int(df.shape[0]),
+        "num_records": int(df_raw.shape[0]),
+        "num_valid_records": int(valid_df.shape[0]),
+        "num_na_records": int(df_raw.shape[0] - valid_df.shape[0]),
         "results_csv": str(results_path),
         "tables": [str(p) for p in table_paths],
     }
 
-    if not df.empty:
+    if not valid_df.empty:
         best = (
-            df.sort_values("accuracy", ascending=False)
+            valid_df.sort_values("accuracy", ascending=False)
             .groupby(["dataset", "method", "classifier"], as_index=False)
             .first()
         )

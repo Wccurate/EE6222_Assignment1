@@ -112,7 +112,9 @@ def build_classifier(
     if classifier_name == "logistic":
         return LogisticClassifier(
             C=float(p.get("C", 1.0)),
-            max_iter=int(p.get("max_iter", 1000)),
+            max_iter=int(p.get("max_iter", 3000)),
+            tol=float(p.get("tol", 1e-3)),
+            solver=str(p.get("solver", "lbfgs")),
             n_jobs=n_jobs,
             random_state=random_state,
         )

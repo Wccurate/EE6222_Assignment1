@@ -59,6 +59,7 @@ def apply_defaults(cfg: dict[str, Any]) -> dict[str, Any]:
     )
     out.setdefault("method_grids", {})
     out.setdefault("method_d_overrides", {})
+    out.setdefault("method_max_dims", {})
     out.setdefault("cv_folds", 3)
     out.setdefault("n_jobs", -1)
     out.setdefault(
@@ -123,8 +124,8 @@ def validate_config(cfg: dict[str, Any]) -> None:
             raise ValueError(f"Invalid d-grid for dataset {dataset}: {dims}")
 
     cv_folds = cfg.get("cv_folds", 3)
-    if not isinstance(cv_folds, int) or cv_folds < 2:
-        raise ValueError("`cv_folds` must be >= 2")
+    if not isinstance(cv_folds, int) or cv_folds < 1:
+        raise ValueError("`cv_folds` must be >= 1")
 
     # Optional explicit LDA method-specific d override must satisfy d <= C-1.
     method_d_overrides = cfg.get("method_d_overrides", {})
@@ -145,6 +146,15 @@ def validate_config(cfg: dict[str, Any]) -> None:
                 raise ValueError(
                     f"{method_name} dims for {dataset} exceed C-1={c_minus_1}: {dims}"
                 )
+
+    method_max_dims = cfg.get("method_max_dims", {})
+    if not isinstance(method_max_dims, dict):
+        raise ValueError("`method_max_dims` must be a dict")
+    for method_name, max_dim in method_max_dims.items():
+        if method_name not in KNOWN_METHODS:
+            raise ValueError(f"Unknown method in method_max_dims: {method_name}")
+        if not isinstance(max_dim, int) or max_dim <= 0:
+            raise ValueError(f"method_max_dims['{method_name}'] must be a positive integer")
 
 
 def get_dataset_num_classes(dataset: str) -> int:
