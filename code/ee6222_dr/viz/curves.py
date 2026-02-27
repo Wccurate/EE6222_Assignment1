@@ -55,9 +55,11 @@ def plot_accuracy_error_curves(df: pd.DataFrame, figures_dir: str | Path) -> lis
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     agg = aggregate_curves(df)
+    if agg.empty:
+        return []
     out_paths: list[Path] = []
 
-    for dataset in sorted(df["dataset"].unique()):
+    for dataset in sorted(agg["dataset"].unique()):
         acc_path = figures_dir / f"accuracy_vs_d_{dataset}.png"
         err_path = figures_dir / f"error_vs_d_{dataset}.png"
 

@@ -40,6 +40,7 @@ def save_results_long(run_dir: Path, rows: list[dict[str, Any]]) -> Path:
         "best_params",
         "tune_classifier",
         "cv_score",
+        "status",
     ]
     df = pd.DataFrame(rows).reindex(columns=columns)
     path = run_dir / "results_long.csv"

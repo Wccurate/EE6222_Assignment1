@@ -75,7 +75,7 @@
   "classifier_params": {
     "knn": {"n_neighbors": 1},
     "mahalanobis": {"reg": 0.001, "shrinkage": 0.1},
-    "logistic": {"C": 1.0, "max_iter": 1000}
+    "logistic": {"C": 1.0, "max_iter": 3000, "tol": 0.001, "solver": "lbfgs"}
   },
   "interpretability": {
     "ae_d": 16,
