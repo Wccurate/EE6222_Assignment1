@@ -10,3 +10,4 @@ venv/
 .DS_Store
 outputs/
 !outputs/.gitkeep
+data/
