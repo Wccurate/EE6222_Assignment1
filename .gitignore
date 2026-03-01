@@ -58,3 +58,5 @@ env/
 report/build/
 report/out/
 
+# Local history snapshots
+.history/
